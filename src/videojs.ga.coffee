@@ -44,6 +44,7 @@ videojs.plugin 'ga', (options = {}) ->
 
   timeupdate = ->
     currentTime = Math.round(@currentTime())
+    hmsCurrentTime = secondsToHms(currentTime);
     duration = Math.round(@duration())
     percentPlayed = Math.round(currentTime/duration*100)
 
@@ -53,7 +54,11 @@ videojs.plugin 'ga', (options = {}) ->
         if "start" in eventsToTrack && percent == 0 && percentPlayed > 0
           sendbeacon( 'start', true )
         else if "percentsPlayed" in eventsToTrack && percentPlayed != 0
-          sendbeacon( 'percent played', true, percent )
+          paddedpercent = pad(percent, 2)
+          if @seeking()
+            sendbeacon( "seeked past #{ paddedpercent }%", true, paddedpercent )
+          else
+            sendbeacon( "played #{ paddedpercent }% ( #{ hmsCurrentTime } )", true, paddedpercent)
 
         if percentPlayed > 0
           percentsAlreadyTracked.push(percent)
@@ -66,8 +71,23 @@ videojs.plugin 'ga', (options = {}) ->
         seeking = true
         sendbeacon( 'seek start', false, seekStart )
         sendbeacon( 'seek end', false, seekEnd )
-
+        # allow tracking again, if seeking backwards by removing percents from the percentsAlreadyTracked array
+        if seekEnd < seekStart
+          removePercentTrackedSlice(seekEnd, seekStart, duration) # yes the order is right
     return
+
+  #scrubbing = ( percent, duration, timecode )->
+
+
+  removePercentTrackedSlice = (littleTime, bigTime , duration) ->
+    littlePercent = Math.round(littleTime/duration*100)
+    bigPercent = Math.round(bigTime/duration*100)
+    for percent in [0..99] by percentsPlayedInterval
+      if littlePercent < percent < bigPercent
+        if percent in percentsAlreadyTracked
+          # console.log( "removed #{ percent }")
+          percentidx = percentsAlreadyTracked.indexOf(percent)
+          percentsAlreadyTracked.splice(percentidx, 1)
 
   end = ->
     sendbeacon( 'end', true )
@@ -110,9 +130,37 @@ videojs.plugin 'ga', (options = {}) ->
       sendbeacon( 'exit fullscreen', false, currentTime )
     return
 
+  pad = ( number, padTo ) ->
+    padZeros = padTo - 1
+    if number <  Math.pow(10, padZeros)
+      padded = stringrepeat("0", padZeros) + number
+    else
+      padded = "" + number
+    return padded
+
+  # thanks http://coffeescript.org/documentation/docs/helpers.html
+  stringrepeat = ( pattern, repeatTimes ) ->
+    res = ''
+    while repeatTimes > 0
+      res += pattern if repeatTimes & 1
+      repeatTimes >>>= 1
+      pattern += pattern
+    return res
+
+  secondsToHms = (d) ->
+    d = Number(d)
+    h = Math.floor(d / 3600)
+    m = Math.floor(d % 3600 / 60)
+    s = Math.floor(d % 3600 % 60)
+    if h > 0
+      res = pad(h, 2) + ':' + pad(m, 2) + ':' + pad(s, 2)
+    else
+      res = pad(m, 2) + ':' + pad(s, 2)
+    return res
+
   sendbeacon = ( action, nonInteraction, value ) ->
-    # console.log action, " ", nonInteraction, " ", value
-    if window.ga
+    console.log action, " ", nonInteraction, " ", value
+    if window.ga && false
       ga 'send', 'event',
         'eventCategory' 	: eventCategory
         'eventAction'		  : action
