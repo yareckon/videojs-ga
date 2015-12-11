@@ -1,5 +1,5 @@
 /*
-* videojs-ga - v0.4.2 - 2015-02-06
+* videojs-ga - v0.4.2 - 2015-12-11
 * Copyright (c) 2015 Michael Bensoussan
 * Licensed MIT
 */
@@ -7,7 +7,7 @@
   var __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
 
   videojs.plugin('ga', function(options) {
-    var dataSetupOptions, defaultsEventsToTrack, end, error, eventCategory, eventLabel, eventsToTrack, fullscreen, loaded, parsedOptions, pause, percentsAlreadyTracked, percentsPlayedInterval, play, resize, seekEnd, seekStart, seeking, sendbeacon, timeupdate, volumeChange;
+    var dataSetupOptions, defaultsEventsToTrack, end, error, eventCategory, eventLabel, eventsToTrack, fullscreen, loaded, pad, parsedOptions, pause, percentsAlreadyTracked, percentsPlayedInterval, play, removePercentTrackedSlice, resize, secondsToHms, seekEnd, seekStart, seeking, sendbeacon, stringrepeat, timeupdate, volumeChange;
     if (options == null) {
       options = {};
     }
@@ -36,16 +36,29 @@
       }
     };
     timeupdate = function() {
-      var currentTime, duration, percent, percentPlayed, _i;
+      var currentTime, currentTimeAlreadyReported, duration, hmsCurrentTime, paddedpercent, percent, percentPlayed, roughSecondsPerInterval, _i;
       currentTime = Math.round(this.currentTime());
+      hmsCurrentTime = secondsToHms(currentTime);
       duration = Math.round(this.duration());
       percentPlayed = Math.round(currentTime / duration * 100);
+      currentTimeAlreadyReported = false;
+      roughSecondsPerInterval = Math.round(duration / (100 / percentsPlayedInterval));
       for (percent = _i = 0; _i <= 99; percent = _i += percentsPlayedInterval) {
         if (percentPlayed >= percent && __indexOf.call(percentsAlreadyTracked, percent) < 0) {
           if (__indexOf.call(eventsToTrack, "start") >= 0 && percent === 0 && percentPlayed > 0) {
             sendbeacon('start', true);
           } else if (__indexOf.call(eventsToTrack, "percentsPlayed") >= 0 && percentPlayed !== 0) {
-            sendbeacon('percent played', true, percent);
+            paddedpercent = pad(percent, 2);
+            if (this.seeking()) {
+              sendbeacon("seeked past " + paddedpercent + "%", true);
+            } else {
+              if (currentTimeAlreadyReported === false) {
+                sendbeacon("played " + paddedpercent + "% ( " + hmsCurrentTime + " )", true, roughSecondsPerInterval);
+                currentTimeAlreadyReported = true;
+              } else {
+                sendbeacon("scrubbed past " + paddedpercent + "%", true);
+              }
+            }
           }
           if (percentPlayed > 0) {
             percentsAlreadyTracked.push(percent);
@@ -57,10 +70,32 @@
         seekEnd = currentTime;
         if (Math.abs(seekStart - seekEnd) > 1) {
           seeking = true;
-          sendbeacon('seek start', false, seekStart);
-          sendbeacon('seek end', false, seekEnd);
+          sendbeacon('seek start', false, 0);
+          sendbeacon('seek end', false, 0);
+          if (seekEnd < seekStart) {
+            removePercentTrackedSlice(seekEnd, seekStart, duration);
+          }
         }
       }
+    };
+    removePercentTrackedSlice = function(littleTime, bigTime, duration) {
+      var bigPercent, littlePercent, percent, percentidx, _i, _results;
+      littlePercent = Math.round(littleTime / duration * 100);
+      bigPercent = Math.round(bigTime / duration * 100);
+      _results = [];
+      for (percent = _i = 0; _i <= 99; percent = _i += percentsPlayedInterval) {
+        if ((littlePercent < percent && percent < bigPercent)) {
+          if (__indexOf.call(percentsAlreadyTracked, percent) >= 0) {
+            percentidx = percentsAlreadyTracked.indexOf(percent);
+            _results.push(percentsAlreadyTracked.splice(percentidx, 1));
+          } else {
+            _results.push(void 0);
+          }
+        } else {
+          _results.push(void 0);
+        }
+      }
+      return _results;
     };
     end = function() {
       sendbeacon('end', true);
@@ -100,6 +135,41 @@
       } else {
         sendbeacon('exit fullscreen', false, currentTime);
       }
+    };
+    pad = function(number, padTo) {
+      var padZeros, padded;
+      padZeros = padTo - 1;
+      if (number < Math.pow(10, padZeros)) {
+        padded = stringrepeat("0", padZeros) + number;
+      } else {
+        padded = "" + number;
+      }
+      return padded;
+    };
+    stringrepeat = function(pattern, repeatTimes) {
+      var res;
+      res = '';
+      while (repeatTimes > 0) {
+        if (repeatTimes & 1) {
+          res += pattern;
+        }
+        repeatTimes >>>= 1;
+        pattern += pattern;
+      }
+      return res;
+    };
+    secondsToHms = function(d) {
+      var h, m, res, s;
+      d = Number(d);
+      h = Math.floor(d / 3600);
+      m = Math.floor(d % 3600 / 60);
+      s = Math.floor(d % 3600 % 60);
+      if (h > 0) {
+        res = pad(h, 2) + ':' + pad(m, 2) + ':' + pad(s, 2);
+      } else {
+        res = pad(m, 2) + ':' + pad(s, 2);
+      }
+      return res;
     };
     sendbeacon = function(action, nonInteraction, value) {
       if (window.ga) {

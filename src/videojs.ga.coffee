@@ -47,6 +47,8 @@ videojs.plugin 'ga', (options = {}) ->
     hmsCurrentTime = secondsToHms(currentTime);
     duration = Math.round(@duration())
     percentPlayed = Math.round(currentTime/duration*100)
+    currentTimeAlreadyReported = false
+    roughSecondsPerInterval = Math.round(duration / ( 100 / percentsPlayedInterval))
 
     for percent in [0..99] by percentsPlayedInterval
       if percentPlayed >= percent && percent not in percentsAlreadyTracked
@@ -56,9 +58,13 @@ videojs.plugin 'ga', (options = {}) ->
         else if "percentsPlayed" in eventsToTrack && percentPlayed != 0
           paddedpercent = pad(percent, 2)
           if @seeking()
-            sendbeacon( "seeked past #{ paddedpercent }%", true, paddedpercent )
+            sendbeacon( "seeked past #{ paddedpercent }%", true )
           else
-            sendbeacon( "played #{ paddedpercent }% ( #{ hmsCurrentTime } )", true, paddedpercent)
+            if currentTimeAlreadyReported == false
+              sendbeacon( "played #{ paddedpercent }% ( #{ hmsCurrentTime } )", true, roughSecondsPerInterval)
+              currentTimeAlreadyReported = true
+            else
+              sendbeacon( "scrubbed past #{ paddedpercent }%", true)
 
         if percentPlayed > 0
           percentsAlreadyTracked.push(percent)
@@ -69,8 +75,8 @@ videojs.plugin 'ga', (options = {}) ->
       # if the difference between the start and the end are greater than 1 it's a seek.
       if Math.abs(seekStart - seekEnd) > 1
         seeking = true
-        sendbeacon( 'seek start', false, seekStart )
-        sendbeacon( 'seek end', false, seekEnd )
+        sendbeacon( 'seek start', false, 0 )
+        sendbeacon( 'seek end', false, 0 )
         # allow tracking again, if seeking backwards by removing percents from the percentsAlreadyTracked array
         if seekEnd < seekStart
           removePercentTrackedSlice(seekEnd, seekStart, duration) # yes the order is right
@@ -159,8 +165,8 @@ videojs.plugin 'ga', (options = {}) ->
     return res
 
   sendbeacon = ( action, nonInteraction, value ) ->
-    console.log action, " ", nonInteraction, " ", value
-    if window.ga && false
+    # console.log action, " ", nonInteraction, " ", value
+    if window.ga
       ga 'send', 'event',
         'eventCategory' 	: eventCategory
         'eventAction'		  : action
