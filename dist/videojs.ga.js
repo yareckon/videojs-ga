@@ -1,6 +1,6 @@
 /*
-* videojs-ga - v0.4.2 - 2015-12-11
-* Copyright (c) 2015 Michael Bensoussan
+* videojs-ga - v0.4.2 - 2017-01-31
+* Copyright (c) 2017 Michael Bensoussan
 * Licensed MIT
 */
 (function() {
@@ -172,13 +172,21 @@
       return res;
     };
     sendbeacon = function(action, nonInteraction, value) {
-      if (window.ga) {
-        ga('send', 'event', {
+      if (window.dataLayer) {
+        dataLayer.push({
           'eventCategory': eventCategory,
           'eventAction': action,
           'eventLabel': eventLabel,
           'eventValue': value,
-          'nonInteraction': nonInteraction
+          'event': 'videojs'
+        });
+      } else if (window.ga) {
+        ga('set', 'nonInteraction', nonInteraction);
+        ga('send', 'event', {
+          'eventCategory': eventCategory,
+          'eventAction': action,
+          'eventLabel': eventLabel,
+          'eventValue': value
         });
       } else if (window._gaq) {
         _gaq.push(['_trackEvent', eventCategory, action, eventLabel, value, nonInteraction]);
